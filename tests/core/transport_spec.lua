@@ -40,27 +40,85 @@ describe('the Neovim-to-rex boundary', function()
     assert.are.same({}, rex.argv)
   end)
 
+  ---Every message the backend gives core's logger, as `level: message`.
+  ---@return string[]
+  local function capture_log()
+    local said = {}
+    local fake = {}
+    for _, level in ipairs({ 'debug', 'warn' }) do
+      fake[level] = function(fmt, ...)
+        table.insert(said, level .. ': ' .. fmt:format(...))
+      end
+    end
+    package.loaded['smart-splits.log'] = fake
+    return said
+  end
+
+  after_each(function()
+    package.loaded['smart-splits.log'] = nil
+  end)
+
+  -- each with the warning it must give
   local failures = {
-    ['`rex` is missing'] = { raise = 'ENOENT: no such file or directory (cmd): "rex"' },
-    ['rex exits non-zero'] = { result = { code = 3, signal = 0, stdout = '', stderr = 'Error: session not found' } },
-    ['rex times out'] = { result = { code = 124, signal = 15, stdout = '', stderr = '' } },
-    ['rex times out without a signal'] = { result = { code = 124, signal = 0, stdout = '', stderr = '' } },
-    ['wait() returns no table'] = { result = 'not a table' },
-    ['rex prints junk'] = { result = { code = 0, signal = 0, stdout = 'panic: oh no\n', stderr = '' } },
-    ['rex prints nothing'] = { result = { code = 0, signal = 0, stdout = '', stderr = '' } },
-    ['the reply is not a table'] = { result = { code = 0, signal = 0, stdout = '"handled"\n', stderr = '' } },
-    ['handled is not true'] = { result = { code = 0, signal = 0, stdout = '{"handled":"yes"}\n', stderr = '' } },
+    ['`rex` is missing'] = { { raise = 'ENOENT: no such file or directory (cmd): "rex"' }, 'ENOENT' },
+    ['rex exits non-zero'] = {
+      { result = { code = 3, signal = 0, stdout = '', stderr = 'Error: session not found\nUsage: rex do ...\n' } },
+      'rex do exited 3: Error: session not found$',
+    },
+    ['rex times out'] = { { result = { code = 124, signal = 15, stdout = '', stderr = '' } }, 'timed out after 500 ms' },
+    ['rex times out without a signal'] = {
+      { result = { code = 124, signal = 0, stdout = '', stderr = '' } },
+      'timed out after 500 ms',
+    },
+    ['wait() returns no table'] = { { result = 'not a table' }, 'gave no result' },
+    ['rex prints junk'] = {
+      { result = { code = 0, signal = 0, stdout = 'panic: oh no\n', stderr = '' } },
+      'unreadable',
+    },
+    ['rex prints nothing'] = { { result = { code = 0, signal = 0, stdout = '', stderr = '' } }, 'unreadable' },
+    ['the reply is not a table'] = {
+      { result = { code = 0, signal = 0, stdout = '"handled"\n', stderr = '' } },
+      'unreadable',
+    },
   }
 
-  for name, opts in pairs(failures) do
-    it(('answers not handled, without raising, when %s'):format(name), function()
-      h.rex('nested-4pane', ids.A, opts)
+  for name, case in pairs(failures) do
+    it(('answers not handled, without raising, and warns when %s'):format(name), function()
+      local said = capture_log()
+      h.rex('nested-4pane', ids.A, case[1])
       for _, dir in ipairs({ 'left', 'right', 'up', 'down' }) do
         assert.is_false(backend.move(dir, { at_edge = 'wrap' }))
         assert.is_false(backend.resize(dir, { amount = 3 }))
       end
+      assert.are.equal(8, #said, vim.inspect(said))
+      for _, line in ipairs(said) do
+        assert.is_truthy(line:find('^warn: rex backend: '), line)
+        assert.is_truthy(line:find(case[2]), line)
+        assert.is_nil(line:find('\n'), line)
+      end
     end)
   end
+
+  it('keeps an ordinary not-handled reply at debug', function()
+    local said = capture_log()
+    h.rex('nested-4pane', ids.A, { result = { code = 0, signal = 0, stdout = '{"handled":"yes"}\n', stderr = '' } })
+    assert.is_false(backend.move('right', {}))
+    h.rex('nested-4pane', ids.A)
+    assert.is_false(backend.move('left', {}))
+    assert.are.same({ 'debug: rex: move right -> nil', 'debug: rex: move left -> edge' }, said)
+  end)
+
+  it("does without core's logger", function()
+    package.loaded['smart-splits.log'] = nil
+    package.preload['smart-splits.log'] = function()
+      error('no core here')
+    end
+    h.rex('nested-4pane', ids.A, { result = { code = 3, signal = 0, stdout = '', stderr = 'boom' } })
+    local ok, handled = pcall(backend.move, 'right', {})
+    package.preload['smart-splits.log'] = nil
+    assert.is_true(ok, handled)
+    assert.is_false(handled)
+  end)
 end)
 
 describe('detect()', function()

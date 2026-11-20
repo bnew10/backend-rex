@@ -48,11 +48,13 @@ local function env(name)
   return value ~= '' and value or nil
 end
 
+---Through core's logger, when core is there to log to.
+---@param level 'debug'|'warn'
 ---@param fmt string
-local function debug_log(fmt, ...)
-  local ok, log = pcall(require, 'smart-splits.log')
+local function log(level, fmt, ...)
+  local ok, core_log = pcall(require, 'smart-splits.log')
   if ok then
-    log.debug(fmt, ...)
+    core_log[level](fmt, ...)
   end
 end
 
@@ -97,10 +99,14 @@ end
 local function run(req)
   local reply, why = ask(req)
   if not reply then
-    debug_log('rex: %s %s not handled: %s', req.op, req.dir, why)
+    -- the backend cannot reach Rex, so every edge now stops dead: say so.
+    -- Core echoes each distinct message once; one line, so it never turns
+    -- into a hit-enter prompt.
+    log('warn', 'rex backend: %s', tostring(why):match('^[^\n]*'))
     return false
   end
-  debug_log('rex: %s %s -> %s', req.op, req.dir, reply.did or reply.why)
+  -- an edge, a clamp, a zoom: core falls back as it would without a backend
+  log('debug', 'rex: %s %s -> %s', req.op, req.dir, reply.did or reply.why)
   return reply.handled == true
 end
 
