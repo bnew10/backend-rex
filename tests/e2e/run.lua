@@ -238,6 +238,7 @@ local function reset()
     require('smart-splits-backend-rex').setup()
     require('e2e').setup('stop')
     vim.cmd('silent! only!')
+    vim.cmd.lcd(vim.fn.getcwd(-1, -1))
     vim.wo.wrap = false
     vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.fn['repeat']({ ('x'):rep(500) }, 300))
     vim.cmd('normal! ggH0')
@@ -321,8 +322,10 @@ local function cases()
     expect(focused() == C, 'focus is %s, want C', focused())
   end)
 
-  case("at_edge 'split' at the right edge: a new focused Rex pane right of B", function()
-    nv('require("e2e").setup("split")')
+  case("at_edge 'split' at the right edge: a new focused Rex pane right of B, in the window's directory", function()
+    local dir = vim.fn.tempname()
+    vim.fn.mkdir(dir, 'p')
+    nv('require("e2e").setup("split") vim.cmd.lcd(...)', dir)
     press(CTRL.l)
     local w = window()
     local all = leaves(w.layers[1].layout)
@@ -332,6 +335,14 @@ local function cases()
     local b, n = rect(w, B), rect(w, new)
     expect(math.abs(n[1] - (b[1] + b[3])) < 1e-6 and n[2] == b[2], 'the new pane is not right of B')
     expect(wins() == 1, 'Neovim split too')
+    expect(
+      poll(function()
+        local process = vim.json.decode(rex({ 'block', 'call', '-s', S, '-b', new, 'process' }))
+        return process.child and process.child.cwd == vim.uv.fs_realpath(dir)
+      end, 3000),
+      'the new pane did not start in %s',
+      dir
+    )
   end)
 
   case('zoomed tab: moves anyway and Rex ends the zoom', function()
