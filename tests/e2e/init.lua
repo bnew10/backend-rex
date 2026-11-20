@@ -7,20 +7,36 @@ vim.opt.runtimepath:append(root .. '/deps/smart-splits.nvim')
 vim.o.swapfile = false
 vim.o.shadafile = 'NONE'
 
----Core's options for a case, as `require('e2e').setup(at_edge)`. Every backend
----call lands in the log with its duration (`slow_threshold = 0`), which is how
----run.lua times them.
+local backend = require('smart-splits-backend-rex')
+
+---What run.lua reads and calls over RPC, as `require('e2e')`.
+local e2e = { calls = {} }
+package.loaded.e2e = e2e
+
+---The backend as core sees it, recording each call core makes: the op, the
+---direction, what it returned and how long Neovim was blocked in it, which is
+---the span core's own slow-call diagnostic measures.
+local recorded = setmetatable({}, { __index = backend })
+for _, op in ipairs({ 'move', 'resize' }) do
+  recorded[op] = function(direction, opts)
+    local start = vim.uv.hrtime()
+    local handled = backend[op](direction, opts)
+    table.insert(e2e.calls, { op = op, dir = direction, handled = handled, ms = (vim.uv.hrtime() - start) / 1e6 })
+    return handled
+  end
+end
+
+---Core's options for a case. The log file gets every level; nothing below
+---error is echoed, so no message can leave a prompt to swallow the next key.
 ---@param at_edge string
-local function setup(at_edge)
+function e2e.setup(at_edge)
   require('smart-splits').setup({
-    mux = { backend = 'smart-splits-backend-rex' },
+    mux = { backend = recorded },
     move = { at_edge = at_edge },
-    log = { level = 'debug', file = vim.env.E2E_LOG },
-    diagnostic = { enabled = false, slow_threshold = 0 },
+    log = { level = 'error', file = vim.env.E2E_LOG },
   })
 end
-package.loaded.e2e = { setup = setup }
-setup('stop')
+e2e.setup('stop')
 
 local ss = require('smart-splits')
 for key, dir in pairs({ h = 'left', j = 'down', k = 'up', l = 'right' }) do

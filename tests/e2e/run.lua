@@ -379,8 +379,7 @@ local function cases()
   end)
 
   case(('latency: %d edge moves into Rex'):format(LATENCY_RUNS), function()
-    local log = nv('return vim.env.E2E_LOG')
-    local skip = #vim.fn.readfile(log)
+    nv("require('e2e').calls = {}")
     local failures = 0
     for i = 1, LATENCY_RUNS do
       api('session.focus_block', { block_id = B })
@@ -393,17 +392,13 @@ local function cases()
         failures = failures + 1
       end
     end
-    vim.uv.sleep(300) -- core appends to its log asynchronously
-    local ms = {}
-    for i, line in ipairs(vim.fn.readfile(log)) do
-      local took = i > skip and line:match('move%(%) took ([%d.]+)ms')
-      if took then
-        ms[#ms + 1] = tonumber(took)
-      end
-    end
+    local calls = nv("return require('e2e').calls")
+    expect(#calls == LATENCY_RUNS, 'core made %d backend calls, want %d', #calls, LATENCY_RUNS)
+    local ms = vim.tbl_map(function(call)
+      return call.ms
+    end, calls)
     table.sort(ms)
     local n = #ms
-    expect(n == LATENCY_RUNS, 'core timed %d moves, want %d', n, LATENCY_RUNS)
     local median = n % 2 == 1 and ms[(n + 1) / 2] or (ms[n / 2] + ms[n / 2 + 1]) / 2
     note(
       'Neovim blocked per move: median %.1f ms, range %.1f-%.1f ms, n=%d, failures %d',
@@ -451,9 +446,9 @@ local function cases()
     expect(got.shell_alt == true and math.abs(got.ratio - 0.515) < 1e-9, 'alt+l in A: %s', vim.inspect(got))
   end)
 
-  case('core logged no backend errors', function()
+  case('core logged no backend warnings or errors', function()
     for _, line in ipairs(vim.fn.readfile(nv('return vim.env.E2E_LOG'))) do
-      expect(not line:find(' ERROR '), '%s', line)
+      expect(not line:find(' ERROR ') and not line:find(' WARN '), '%s', line)
     end
   end)
 end
