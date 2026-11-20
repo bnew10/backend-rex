@@ -1,0 +1,56 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    env:
+      STYLUA_VERSION: 2.6.0
+      SELENE_VERSION: 0.32.0
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install stylua and selene
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL -o "$RUNNER_TEMP/stylua.zip" "https://github.com/JohnnyMorganz/StyLua/releases/download/v$STYLUA_VERSION/stylua-linux-x86_64.zip"
+          curl -fsSL -o "$RUNNER_TEMP/selene.zip" "https://github.com/Kampfkarren/selene/releases/download/$SELENE_VERSION/selene-$SELENE_VERSION-linux.zip"
+          unzip -o -d "$bin" "$RUNNER_TEMP/stylua.zip"
+          unzip -o -d "$bin" "$RUNNER_TEMP/selene.zip"
+          chmod +x "$bin/stylua" "$bin/selene"
+          echo "$bin" >> "$GITHUB_PATH"
+      - name: Check formatting
+        run: stylua --check lua tests
+      - name: Run selene
+        run: selene ./lua/ ./tests/
+  test:
+    name: Test / Neovim ${{ matrix.neovim }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: rhysd/action-setup-vim@v1.6.1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+      - uses: leafo/gh-actions-lua@v13.1.0
+        with:
+          luaVersion: '5.1'
+      - uses: leafo/gh-actions-luarocks@v6.1.1
+      - uses: extractions/setup-just@v4
+      - name: Install busted and nlua
+        run: |
+          luarocks install busted
+          luarocks install nlua
+      - name: Run the specs
+        run: |
+          nvim --version | head -n 1
+          just test
