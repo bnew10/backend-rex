@@ -16,7 +16,8 @@ Two halves have to agree: this plugin, and a few Rex key bindings that let `<C-h
 
 ### Neovim
 
-With [lazy.nvim](https://github.com/folke/lazy.nvim), pointing at wherever you keep this repository:
+The checkout lives at `~/repos/backend-rex` and has no remote, so
+[lazy.nvim](https://github.com/folke/lazy.nvim) loads it from there with `dir`:
 
 ```lua
 {
@@ -26,12 +27,19 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim), pointing at wherever you k
     move = { at_edge = 'stop' },
   },
   dependencies = {
-    { dir = '~/repos/smart-splits-backend-rex', main = 'smart-splits-backend-rex', opts = {} },
+    { dir = '~/repos/backend-rex', main = 'smart-splits-backend-rex', opts = {} },
   },
 }
 ```
 
-and the usual mappings, since smart-splits.nvim binds nothing itself:
+With another multiplexer running inside a Rex pane, list its backend first, since tmux in a Rex pane
+still sees `$REX_SESSION` and `$REX_BLOCK`; the first backend that detects wins:
+
+```lua
+mux = { backend = { 'smart-splits-backend-tmux', 'smart-splits-backend-rex' } },
+```
+
+Then the usual mappings, since smart-splits.nvim binds nothing itself:
 
 ```lua
 local ss = require('smart-splits')
@@ -57,8 +65,8 @@ shell pane behaves exactly like Neovim's edge:
 ```lua
 -- ~/.config/rex/init.lua
 local TERMINAL = "com.superlogical.terminal"
--- where your plugin manager put this repository
-local PLUGIN = os.getenv("HOME") .. "/.local/share/nvim/lazy/smart-splits-backend-rex"
+-- the same checkout lazy.nvim loads
+local PLUGIN = os.getenv("HOME") .. "/repos/backend-rex"
 local smart = dofile(PLUGIN .. "/lua/smart-splits-backend-rex/layout.lua")
 
 -- Neovim is the pane's foreground program: it gets the key, and smart-splits
@@ -104,7 +112,8 @@ require('smart-splits-backend-rex').setup({
   -- keys leave a zoomed pane and end the zoom, and so does this
   disable_nav_when_zoomed = false,
   -- milliseconds to wait for `rex do`. A call takes ~45 ms; this only bounds a
-  -- wedged server, which then costs one stall per keypress at an edge
+  -- wedged server, which then costs one stall per keypress at an edge and
+  -- one warning
   timeout = 500,
 })
 ```
@@ -131,12 +140,15 @@ moved.
 **Resizing** moves the nearest border on that axis after the pane (its right or bottom border), else
 the nearest before it, by `amount` cells: `left`/`up` lower that split's ratio, `right`/`down` raise
 it, by `amount / (pane cells × split size / pane size)`. That is tmux's `resize-pane` rule. The ratio
-stays within 0.05..0.95, and the clamp never moves a border against the key.
+stays within 0.05..0.95, and the clamp never moves a border against the key: a resize the clamp would
+turn into no move, or into a move the other way, is not handled.
 
-`detect()` checks `$REX_SESSION`, `$REX_BLOCK` and that `rex` is executable, and starts nothing. Any
-failure on the way (no Rex environment, no `rex`, a non-zero exit, the timeout, a reply that is not
-JSON, a pane Rex no longer knows) is "not handled", logged at debug level, and core carries on as if
-there were no Rex pane that way. Nothing raises.
+`detect()` checks `$REX_SESSION`, `$REX_BLOCK` and that `rex` is executable, and starts nothing. Every
+failure is "not handled" and core carries on as if there were no Rex pane that way; nothing raises.
+Failing to reach Rex at all (no Rex environment, no `rex`, a non-zero exit, the timeout, a reply that
+is not JSON) is a warning, since every edge then stops dead: core echoes each distinct message once,
+one line long, and logs every occurrence. An ordinary not-handled reply (an edge, a zoom, the clamp, a
+pane Rex no longer knows) is logged at debug level only.
 
 ## Behaviour
 
@@ -147,7 +159,7 @@ when the backend did not handle the move.
 | --------------- | ---------------------------------------------------------------------------------- |
 | `'stop'`, unset | nothing; core then stops too                                                       |
 | `'wrap'`        | focus the farthest pane on the other side that is level with this one              |
-| `'split'`       | a new Rex shell beside this pane on that side, focused, in Neovim's directory      |
+| `'split'`       | a new Rex shell beside this pane on that side, focused, in the window's directory  |
 
 With no pane level with this one, `'wrap'` is handed back to core, which wraps among Neovim's windows.
 
@@ -159,9 +171,11 @@ border would move under a pane drawn over the whole window.
 
 ## Latency
 
-Neovim blocks for the whole round trip. `just e2e` times 24 edge moves per run as core sees them:
-over six runs the median was 41-43 ms and single moves took 38-60 ms, with no failures. Nearly all of it is starting the `rex` CLI: the same view and
-focus take 2.5 ms inside an already running `rex do`. Core warns about calls over 100 ms.
+Neovim blocks for the whole round trip. `just e2e` times 24 edge moves per run inside the Neovim under
+test, around each backend call, the span core's slow-call diagnostic measures: over six runs (144
+moves) the median was 43.2-43.6 ms and single moves took 39.9-69.0 ms, with no failures. Nearly all
+of it is starting the `rex` CLI: the same view and focus take 2.5 ms inside an already running `rex
+do`. Core's diagnostic flags calls over 100 ms.
 
 ## Limitations
 
@@ -172,17 +186,22 @@ focus take 2.5 ms inside an already running `rex do`. Core warns about calls ove
 
 ## Troubleshooting
 
-`:checkhealth smart-splits` runs one real request and reports the tab and layer Rex has this pane in
-and how long `rex do` took, or why it failed. `:SmartSplitsLog` shows why each move or resize was not
-handled (`edge`, `zoomed`, `at limit`, `block not in this session`, ...).
+`:checkhealth smart-splits` names the `rex` it runs, then runs one real request and reports the tab
+and layer Rex has this pane in and how long `rex do` took, or why it failed. `:SmartSplitsLog` shows
+why each move or resize was not handled (`edge`, `zoomed`, `at limit`, `block not in this session`,
+...), and every warning in full.
 
 ## Development
 
 `just test` runs the specs: core's protocol conformance suite, and this backend's own, which feed real
 `session.view` snapshots (`tests/fixtures`) through the real `layout.lua` behind a fake `vim.system`.
-`just fmt-check`, `just lint` and `just typecheck` run stylua, selene and LuaLS; `just check` runs
-all four. `just e2e` needs a running Rex server: it builds a scratch session, drives a real Neovim in
-it with typed keys, and removes the session again.
+`layout.lua` runs there in a sandbox holding only what the `rex` CLI's Lua 5.1 gives a script, so a
+stray `vim.*` or LuaJIT-only call fails the specs rather than Rex. `just fmt-check`, `just lint` and
+`just typecheck` run stylua, selene and LuaLS; `just check` runs all four. `just e2e` needs a running
+Rex server and never starts one: it builds a scratch session labelled `smart-splits-backend-rex-e2e`,
+drives a real Neovim in it with typed keys, and removes the session again. It touches no other
+session. An RPC that hangs for 10 s ends the Neovim under test, a watchdog removes the session after
+3 minutes, and a session left with that label by a run that died is removed when the next one starts.
 
 ## License
 
