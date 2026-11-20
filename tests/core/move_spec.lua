@@ -68,7 +68,7 @@ describe('move()', function()
   end)
 
   it('without a cursor position, focuses the pane sharing most of the edge', function()
-    local layout = require('smart-splits-backend-rex.layout')
+    local layout = h.layout()
     local view = h.fixture('nested-4pane')
     -- D's right edge: B shares 0.3 of it, C 0.4
     assert.are.same({ 'focus_block', { block_id = ids.C } }, {
@@ -148,7 +148,7 @@ describe('move()', function()
     end)
 
     it('sends no options without a directory, never an empty JSON array', function()
-      local layout = require('smart-splits-backend-rex.layout')
+      local layout = h.layout()
       local method, args =
         layout.plan(h.fixture('single-pane'), { op = 'move', dir = 'right', block = ids.A, at_edge = 'split' })
       assert.are.equal('new_split', method)

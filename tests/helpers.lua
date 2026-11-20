@@ -1,9 +1,10 @@
 ---A fake Rex for the specs. It replaces `vim.system`, so the backend's own
 ---argv, timeout and JSON go through unchanged, and answers each `rex do` by
 ---running the wrapper the backend passed with `-e`, which loads the real
----`layout.lua`, against a `rex` API that serves a real `session.view` snapshot
----and records every other call. Specs then assert on what core sees (the
----boolean) and on what Rex would have received (the request, the calls).
+---`layout.lua` in a sandbox holding only what the `rex` CLI's Lua 5.1 has,
+---against a `rex` API that serves a real `session.view` snapshot and records
+---every other call. Specs then assert on what core sees (the boolean) and on
+---what Rex would have received (the request, the calls).
 
 local M = {}
 
@@ -46,6 +47,61 @@ function M.transposed(name)
     end
   end
   return view
+end
+
+local LAYOUT = vim.fs.joinpath(vim.fn.getcwd(), 'lua', 'smart-splits-backend-rex', 'layout.lua')
+
+---A global table holding only what the `rex` CLI's Lua 5.1 interpreter
+---(gopher-lua) gives a script, minus what layout.lua has no business with
+---(io, os, require, the loaders), plus `extra`. No `vim`, nor LuaJIT's `bit`,
+---`jit` or `table.move`: Rex-side code that reaches for one fails the specs here
+---instead of failing in Rex.
+---@param extra? table
+---@return table env
+local function lua51(extra)
+  local env = {
+    assert = assert,
+    error = error,
+    getmetatable = getmetatable,
+    ipairs = ipairs,
+    next = next,
+    pairs = pairs,
+    pcall = pcall,
+    rawequal = rawequal,
+    rawget = rawget,
+    rawset = rawset,
+    select = select,
+    setmetatable = setmetatable,
+    tonumber = tonumber,
+    tostring = tostring,
+    type = type,
+    unpack = unpack,
+    xpcall = xpcall,
+    math = math,
+    string = string,
+    table = {
+      concat = table.concat,
+      insert = table.insert,
+      maxn = table.maxn,
+      remove = table.remove,
+      sort = table.sort,
+    },
+  }
+  env._G = env
+  for name, value in pairs(extra or {}) do
+    env[name] = value
+  end
+  ---`rex do`'s `dofile`, loading into this same environment
+  function env.dofile(path)
+    return setfenv(assert(loadfile(path)), env)()
+  end
+  return env
+end
+
+---`layout.lua` as `rex do` loads it, for specs on its pure functions.
+---@return table layout
+function M.layout()
+  return lua51().dofile(LAYOUT)
 end
 
 local real_system = vim.system
@@ -113,7 +169,7 @@ function M.rex(view, block, opts)
       table.insert(state.requests, req)
       fake.args = req
       local chunk = assert(loadstring(assert(flag_value(argv, '-e'))))
-      setfenv(chunk, setmetatable({ rex = fake }, { __index = getfenv(0) }))
+      setfenv(chunk, lua51({ rex = fake }))
       result = { code = 0, signal = 0, stdout = vim.json.encode(chunk()) .. '\n', stderr = '' }
     end
     return {

@@ -31,7 +31,7 @@ describe('resize()', function()
   end)
 
   it("never takes one axis's size for the other's", function()
-    local layout = require('smart-splits-backend-rex.layout')
+    local layout = h.layout()
     local view = h.fixture('nested-4pane')
     for dir, req in pairs({ right = { rows = 40 }, down = { cols = 100 } }) do
       req.op, req.dir, req.block = 'resize', dir, ids.A
