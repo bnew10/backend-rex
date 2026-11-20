@@ -147,6 +147,15 @@ describe('move()', function()
       assert.are.equal(vim.uv.fs_realpath(dir), vim.uv.fs_realpath(rex.calls[1].args.layout.block.options.cwd))
     end)
 
+    it('sends no options without a directory, never an empty JSON array', function()
+      local layout = require('smart-splits-backend-rex.layout')
+      local method, args =
+        layout.plan(h.fixture('single-pane'), { op = 'move', dir = 'right', block = ids.A, at_edge = 'split' })
+      assert.are.equal('new_split', method)
+      assert.are.same({ flavor = 'com.superlogical.terminal.shell' }, args.layout.block)
+      assert.is_nil(vim.json.encode(args):find('"options"'))
+    end)
+
     it('still moves when there is a pane that way', function()
       local rex = h.rex('nested-4pane', ids.A)
       assert.is_true(backend.move('right', { at_edge = 'split' }))

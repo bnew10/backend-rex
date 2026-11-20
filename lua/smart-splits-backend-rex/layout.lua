@@ -237,7 +237,8 @@ function M.plan(view, req)
           direction = AXIS[dir],
           side = FORWARD[dir] and 'after' or 'before',
           focus = true,
-          layout = { block = { flavor = SHELL, options = { cwd = req.cwd } } },
+          -- an empty `options` would reach Rex as a JSON array
+          layout = { block = { flavor = SHELL, options = req.cwd and { cwd = req.cwd } or nil } },
         }
     end
     return nil, 'edge'
