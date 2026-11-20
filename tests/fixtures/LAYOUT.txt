@@ -1,0 +1,13 @@
+Real `session.view` snapshots from a scratch Rex session. Block ids are in tests/helpers.lua.
+Rects are [x, y, w, h] fractions of the window; a "horizontal" split has a left|right border,
+a "vertical" one a top/bottom border; ratio is the before side's share.
+
+single-pane.json                 A alone, rect [0,0,1,1]
+nested-4pane.json                outer horizontal 0.5
+                                   left  = vertical 0.3: A top [0,0,.5,.3],  D bottom [0,.3,.5,.7]
+                                   right = vertical 0.6: B top [.5,0,.5,.6], C bottom [.5,.6,.5,.4]
+nested-4pane-zoomed-B.json       the same tree, with zoomed_block_id = focused_block_id = B
+nested-4pane-plus-floating.json  left ratio 0.4 (A [0,0,.5,.4], D [0,.4,.5,.6]),
+                                   right ratio 0.5 (B [.5,0,.5,.5], C [.5,.5,.5,.5]);
+                                   a floating layer [.25,.25,.5,.5] holding F over the middle;
+                                   a second tab "two" holding E alone
