@@ -10,3 +10,7 @@ vim.lsp.log.set_level('off')
 -- the live session they were started from
 vim.env.REX_SESSION = nil
 vim.env.REX_BLOCK = nil
+
+-- core logs every backend call to a file in the user's own state directory, and
+-- echoes the warnings the failure specs provoke on purpose; neither belongs to a test run
+require('smart-splits').setup({ log = { level = 'error', file = false } })
