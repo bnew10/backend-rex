@@ -10,7 +10,9 @@
 --
 -- types real keys into B's terminal, judges each case by what `session.view` and
 -- that Neovim report, prints PASS or FAIL per case, and destroys the session.
--- It touches no other session: every command names its own with `-s`.
+-- It touches no other session: every command names its own with `-s`. A
+-- watchdog removes the session if the run hangs, and a session left with the
+-- label by a run that died is removed before this one starts.
 --
 -- No app shows the scratch session, so nothing would size its terminals and
 -- every pane would stay 80x24 whatever its rect. run.lua plays the app's part:
@@ -24,6 +26,9 @@ local CTRL = { h = '\8', j = '\10', k = '\11', l = '\12' }
 local ALT = { h = '\27h', j = '\27j', k = '\27k', l = '\27l' }
 local LATENCY_RUNS = 24
 local WIDTH, HEIGHT = 200, 60
+-- a whole run takes about 15 s
+local WATCHDOG_MS = 180000
+local RPC_TIMEOUT_MS = 10000
 
 -- this script may well run in a Rex pane; nothing may default to that session
 vim.env.REX_SESSION = nil
@@ -80,14 +85,25 @@ local function session_ids()
 end
 
 local before = session_ids()
-for _, label in pairs(before) do
+-- ponytail: two runs at once would remove each other's session; one at a time
+for id, label in pairs(before) do
   if label == LABEL then
-    say('FAIL  a session labelled %q already exists; kill it first', LABEL)
-    os.exit(2)
+    say('      removing %s, left labelled %q by a run that did not finish', id, LABEL)
+    rex({ 'kill', id })
+    before[id] = nil
   end
 end
 
 local S = vim.json.decode(rex({ 'new', LABEL, '--json' })).session_id
+
+-- Last resort for a hang nothing below bounds: remove the session and stop.
+-- It fires from inside any wait, a blocked RPC included.
+local watchdog = assert(vim.uv.new_timer())
+watchdog:start(WATCHDOG_MS, 0, function()
+  io.write(('FAIL  watchdog: still running after %d s, removing %s\n'):format(WATCHDOG_MS / 1000, S))
+  os.execute(('rex --autostart=false kill %s'):format(S))
+  os.exit(1)
+end)
 
 local function api(method, args)
   return vim.json.decode(rex({ 'api', 'call', '-s', S, method, vim.json.encode(args or vim.empty_dict()) }))
@@ -109,12 +125,28 @@ local function leaves(node, out)
 end
 
 local A, B, C, D, nv_block_env
-local chan
+local chan, nv_pid
 local results = {}
 
----Run Lua in the Neovim under test.
+---Run Lua in the Neovim under test. An RPC cannot be cancelled, so one that
+---has not answered in RPC_TIMEOUT_MS ends that Neovim, which closes the
+---channel and ends the wait; every later case then fails fast.
 local function nv(code, ...)
-  return vim.rpcrequest(chan, 'nvim_exec_lua', code, { ... })
+  local timer = assert(vim.uv.new_timer())
+  local timed_out = false
+  timer:start(RPC_TIMEOUT_MS, 0, function()
+    timed_out = true
+    vim.uv.kill(nv_pid, 'sigkill')
+  end)
+  local ok, result = pcall(vim.rpcrequest, chan, 'nvim_exec_lua', code, { ... })
+  timer:close()
+  if timed_out then
+    fail('Neovim did not answer within %d ms: %s', RPC_TIMEOUT_MS, code)
+  end
+  if not ok then
+    error(result, 0)
+  end
+  return result
 end
 
 local seq = 0
@@ -456,9 +488,11 @@ end
 local ok, err = pcall(function()
   local first = vim.json.decode(rex({ 'api', 'call', '-s', S, 'session.view', '{}' })).windows[1].window_id
   local sock = vim.fn.tempname() .. '.sock'
+  local pidfile = vim.fn.tempname() .. '.pid'
   local nvim = {
     '/usr/bin/env',
     'E2E_LOG=' .. vim.fn.tempname() .. '.log',
+    'E2E_PID=' .. pidfile,
     vim.v.progpath,
     '--clean',
     '-u',
@@ -504,10 +538,15 @@ local ok, err = pcall(function()
   end
   expect(A and B and C and D, 'the layout did not come out as four panes')
 
-  chan = poll(function()
-    local connected, id = pcall(vim.fn.sockconnect, 'pipe', sock, { rpc = true })
-    return connected and id > 0 and id
+  -- the pid first: from the first RPC on, a hang ends that Neovim
+  nv_pid = poll(function()
+    return vim.fn.filereadable(pidfile) == 1 and tonumber(vim.fn.readfile(pidfile)[1])
   end, 10000)
+  chan = nv_pid
+    and poll(function()
+      local connected, id = pcall(vim.fn.sockconnect, 'pipe', sock, { rpc = true })
+      return connected and id > 0 and id
+    end, 10000)
   if not chan or not poll(function()
     return nv('return vim.g.e2e_ready')
   end, 10000) then
@@ -523,6 +562,7 @@ if not ok then
   say('FAIL  setup: %s', tostring(err))
 end
 
+watchdog:close()
 pcall(rex, { 'kill', S })
 local after = session_ids()
 results[#results + 1] = after[S] == nil

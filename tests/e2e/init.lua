@@ -5,6 +5,8 @@ local root = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h:h:h')
 vim.opt.runtimepath:prepend(root)
 vim.opt.runtimepath:append(root .. '/deps/smart-splits.nvim')
 vim.o.swapfile = false
+-- run.lua ends this Neovim by this pid when an RPC to it hangs
+vim.fn.writefile({ tostring(vim.fn.getpid()) }, vim.env.E2E_PID)
 vim.o.shadafile = 'NONE'
 
 local backend = require('smart-splits-backend-rex')
