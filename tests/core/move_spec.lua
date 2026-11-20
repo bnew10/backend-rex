@@ -131,10 +131,20 @@ describe('move()', function()
             direction = how[1],
             side = how[2],
             focus = true,
-            layout = { block = { flavor = 'com.superlogical.terminal.shell', options = { cwd = vim.uv.cwd() } } },
+            layout = { block = { flavor = 'com.superlogical.terminal.shell', options = { cwd = vim.fn.getcwd() } } },
           },
         }, rex.calls[1])
       end
+    end)
+
+    it("in this window's directory when it has its own", function()
+      local rex = h.rex('single-pane', ids.A)
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, 'p')
+      vim.cmd.lcd(dir)
+      backend.move('right', { at_edge = 'split' })
+      vim.cmd.lcd(vim.fn.getcwd(-1, -1))
+      assert.are.equal(vim.uv.fs_realpath(dir), vim.uv.fs_realpath(rex.calls[1].args.layout.block.options.cwd))
     end)
 
     it('still moves when there is a pane that way', function()

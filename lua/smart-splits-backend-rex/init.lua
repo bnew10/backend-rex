@@ -135,7 +135,7 @@ function M.move(direction, opts)
     rows = vim.o.lines,
     cols = vim.o.columns,
     -- a new pane starts where this Neovim is, as tmux's `#{pane_current_path}`
-    cwd = opts.at_edge == 'split' and vim.uv.cwd() or nil,
+    cwd = opts.at_edge == 'split' and vim.fn.getcwd() or nil,
   })
 end
 
