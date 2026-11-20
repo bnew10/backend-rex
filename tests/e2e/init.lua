@@ -12,7 +12,7 @@ vim.o.shadafile = 'NONE'
 local backend = require('smart-splits-backend-rex')
 
 ---What run.lua reads and calls over RPC, as `require('e2e')`.
-local e2e = { calls = {} }
+local e2e = { calls = {}, path = vim.env.PATH }
 package.loaded.e2e = e2e
 
 ---The backend as core sees it, recording each call core makes: the op, the

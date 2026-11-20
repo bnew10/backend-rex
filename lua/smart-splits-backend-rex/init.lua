@@ -15,11 +15,13 @@ local LAYOUT = vim.fs.joinpath(HERE, 'layout.lua')
 local WRAPPER = ('return dofile(%q).handle(rex, rex.args)'):format(LAYOUT)
 
 ---@class RexBackend.Config
+---@field bin string the `rex` executable: a name looked up on $PATH, or a path
 ---@field disable_nav_when_zoomed boolean refuse to move out of a zoomed Rex tab
 ---@field timeout integer milliseconds to wait for `rex do` before giving up
 
 ---@type RexBackend.Config
 local DEFAULTS = {
+  bin = 'rex',
   -- Rex's own focus keys move out of a zoomed pane and end the zoom, so do the same
   disable_nav_when_zoomed = false,
   -- a call takes ~45 ms; this only bounds a wedged server, which then costs one
@@ -36,7 +38,7 @@ local M = {
 
 ---Store options and return. Core never calls this; it may run for a backend
 ---that is never selected, so it does nothing else.
----@param opts? { disable_nav_when_zoomed?: boolean, timeout?: integer }
+---@param opts? { bin?: string, disable_nav_when_zoomed?: boolean, timeout?: integer }
 function M.setup(opts)
   M.config = vim.tbl_deep_extend('force', DEFAULTS, opts or {})
 end
@@ -70,7 +72,7 @@ local function ask(req)
     return nil, 'not in a Rex pane'
   end
   req.block = block
-  local argv = { 'rex', '--autostart=false', 'do', '-s', session, '-e', WRAPPER, '--args', vim.json.encode(req) }
+  local argv = { M.config.bin, '--autostart=false', 'do', '-s', session, '-e', WRAPPER, '--args', vim.json.encode(req) }
   local ran, result = pcall(function()
     return vim.system(argv, { text = true, timeout = M.config.timeout }):wait()
   end)
@@ -113,7 +115,7 @@ end
 ---Cheap and side-effect free: Rex sets both variables in every terminal it starts.
 ---@return boolean
 function M.detect()
-  return env('REX_SESSION') ~= nil and env('REX_BLOCK') ~= nil and vim.fn.executable('rex') == 1
+  return env('REX_SESSION') ~= nil and env('REX_BLOCK') ~= nil and vim.fn.executable(M.config.bin) == 1
 end
 
 ---Move to the Rex pane across Neovim's edge. Core calls this only at that edge.
@@ -152,11 +154,12 @@ end
 ---Under core's `:checkhealth smart-splits` header. Runs one real `rex do`
 ---when inside Rex, which checks the whole path a keypress takes.
 function M.health()
-  local rex = vim.fn.exepath('rex')
+  local bin = M.config.bin
+  local rex = vim.fn.exepath(bin)
   if rex == '' then
-    vim.health.error('`rex` is not on $PATH')
+    vim.health.error(('`%s` is %s'):format(bin, bin:find('/') and 'not executable' or 'not on $PATH'))
   else
-    vim.health.ok(('`rex` is %s'):format(rex))
+    vim.health.ok(('`%s` is %s'):format(bin, rex))
   end
   local session, block = env('REX_SESSION'), env('REX_BLOCK')
   if not session or not block then

@@ -235,6 +235,7 @@ local function reset()
   nv(
     [[
     vim.env.REX_BLOCK = ...
+    vim.env.PATH = require('e2e').path
     require('smart-splits-backend-rex').setup()
     require('e2e').setup('stop')
     vim.cmd('silent! only!')
@@ -431,6 +432,26 @@ local function cases()
     expect(report:find('OK `rex` is /'), '%s', report)
     expect(report:find('OK pane ' .. vim.pesc(B) .. ' is in tab .- %(tiled layer, 4 panes%)'), '%s', report)
     expect(not report:find('ERROR'), '%s', report)
+  end)
+
+  case('bin: a `rex` off $PATH, under another name, moves into Rex pane A', function()
+    local bin = vim.fn.tempname() .. '-rex-elsewhere'
+    assert(vim.uv.fs_symlink(vim.fn.exepath('rex'), bin))
+    local detected = nv(
+      [[
+      local backend = require('smart-splits-backend-rex')
+      vim.env.PATH = vim.fn.tempname()
+      local without = backend.detect()
+      backend.setup({ bin = ... })
+      require('e2e').setup('stop')
+      return { without, backend.detect() }
+    ]],
+      bin
+    )
+    expect(detected[1] == false and detected[2] == true, 'detect() without bin, with it: %s', vim.inspect(detected))
+    press(CTRL.h)
+    expect(focused() == A, 'focus is %s, want A', focused())
+    note("%s -> %s, with no `rex` on Neovim's $PATH", bin, vim.fn.exepath('rex'))
   end)
 
   case(('latency: %d edge moves into Rex'):format(LATENCY_RUNS), function()

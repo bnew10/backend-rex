@@ -1,6 +1,16 @@
 local h = require('tests.helpers')
 local ids = h.ids
 
+---An empty shell script at `path`, executable.
+---@param path string
+---@return string path
+local function executable(path)
+  vim.fn.mkdir(vim.fs.dirname(path), 'p')
+  vim.fn.writefile({ '#!/bin/sh' }, path)
+  vim.uv.fs_chmod(path, 493) -- 0755
+  return path
+end
+
 describe('the Neovim-to-rex boundary', function()
   local backend = require('smart-splits-backend-rex')
 
@@ -19,6 +29,16 @@ describe('the Neovim-to-rex boundary', function()
     local layout = argv[7]:match('^return dofile%("(.-)"%)%.handle%(rex, rex%.args%)$')
     assert.is_truthy(layout)
     assert.are.equal(vim.fn.getcwd() .. '/lua/smart-splits-backend-rex/layout.lua', layout)
+  end)
+
+  it('runs the configured `bin`, and `rex` without one', function()
+    local rex = h.rex('nested-4pane', ids.A)
+    backend.move('right', {})
+    backend.setup({ bin = '/opt/rex/bin/rex-beta' })
+    backend.move('right', {})
+    assert.are.equal('rex', rex.argv[1][1])
+    assert.are.equal('/opt/rex/bin/rex-beta', rex.argv[2][1])
+    assert.are.same(vim.list_slice(rex.argv[1], 2), vim.list_slice(rex.argv[2], 2))
   end)
 
   it('bounds the wait with the configured timeout', function()
@@ -127,9 +147,7 @@ describe('detect()', function()
   local bin = vim.fn.tempname()
 
   setup(function()
-    vim.fn.mkdir(bin, 'p')
-    vim.fn.writefile({ '#!/bin/sh' }, bin .. '/rex')
-    vim.uv.fs_chmod(bin .. '/rex', 493) -- 0755
+    executable(bin .. '/rex')
   end)
 
   after_each(function()
@@ -157,6 +175,18 @@ describe('detect()', function()
     vim.env.PATH = vim.fn.tempname()
     vim.env.REX_SESSION = h.SESSION
     vim.env.REX_BLOCK = ids.A
+    assert.is_false(backend.detect())
+  end)
+
+  it('checks the configured `bin`, whatever `rex` is on $PATH', function()
+    local mine = executable(vim.fn.tempname() .. '/rex-beta')
+    vim.env.REX_SESSION = h.SESSION
+    vim.env.REX_BLOCK = ids.A
+    vim.env.PATH = vim.fn.tempname()
+    backend.setup({ bin = mine })
+    assert.is_true(backend.detect())
+    vim.env.PATH = bin
+    backend.setup({ bin = mine .. '-gone' })
     assert.is_false(backend.detect())
   end)
 
@@ -202,10 +232,7 @@ describe('health()', function()
 
   it('names the `rex` it would run, or says there is none', function()
     local path = vim.env.PATH
-    local bin = vim.fn.tempname()
-    vim.fn.mkdir(bin, 'p')
-    vim.fn.writefile({ '#!/bin/sh' }, bin .. '/rex')
-    vim.uv.fs_chmod(bin .. '/rex', 493) -- 0755
+    local bin = vim.fs.dirname(executable(vim.fn.tempname() .. '/rex'))
     vim.env.PATH = bin
     backend.health()
     vim.env.PATH = vim.fn.tempname()
@@ -213,6 +240,19 @@ describe('health()', function()
     vim.env.PATH = path
     assert.is_true(reported('ok', '`rex` is ' .. vim.pesc(bin .. '/rex') .. '$'), vim.inspect(said))
     assert.is_true(reported('error', '`rex` is not on %$PATH'), vim.inspect(said))
+  end)
+
+  it('names the configured `bin`, or says it is not executable', function()
+    local path = vim.env.PATH
+    vim.env.PATH = vim.fn.tempname()
+    local mine = executable(vim.fn.tempname() .. '/rex-beta')
+    backend.setup({ bin = mine })
+    backend.health()
+    backend.setup({ bin = mine .. '-gone' })
+    backend.health()
+    vim.env.PATH = path
+    assert.is_true(reported('ok', '`' .. vim.pesc(mine) .. '` is ' .. vim.pesc(mine) .. '$'), vim.inspect(said))
+    assert.is_true(reported('error', '`' .. vim.pesc(mine) .. '%-gone` is not executable'), vim.inspect(said))
   end)
 
   it('explains itself outside Rex without calling it', function()

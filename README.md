@@ -115,6 +115,9 @@ Every option has a working default, and calling `setup()` is optional. It only s
 
 ```lua
 require('smart-splits-backend-rex').setup({
+  -- the `rex` CLI to run: a name looked up on $PATH, or an absolute path for a
+  -- `rex` that is not on Neovim's $PATH
+  bin = 'rex',
   -- refuse to move out of a zoomed Rex tab. Off by default: Rex's own focus
   -- keys leave a zoomed pane and end the zoom, and so does this
   disable_nav_when_zoomed = false,
@@ -150,7 +153,7 @@ it, by `amount / (pane cells × split size / pane size)`. That is tmux's `resize
 stays within 0.05..0.95, and the clamp never moves a border against the key: a resize the clamp would
 turn into no move, or into a move the other way, is not handled.
 
-`detect()` checks `$REX_SESSION`, `$REX_BLOCK` and that `rex` is executable, and starts nothing. Every
+`detect()` checks `$REX_SESSION`, `$REX_BLOCK` and that `bin` is executable, and starts nothing. Every
 failure is "not handled" and core carries on as if there were no Rex pane that way; nothing raises.
 Failing to reach Rex at all (no Rex environment, no `rex`, a non-zero exit, the timeout, a reply that
 is not JSON) is a warning, since every edge then stops dead: core echoes each distinct message once,
