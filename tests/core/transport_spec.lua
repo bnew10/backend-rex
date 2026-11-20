@@ -44,6 +44,8 @@ describe('the Neovim-to-rex boundary', function()
     ['`rex` is missing'] = { raise = 'ENOENT: no such file or directory (cmd): "rex"' },
     ['rex exits non-zero'] = { result = { code = 3, signal = 0, stdout = '', stderr = 'Error: session not found' } },
     ['rex times out'] = { result = { code = 124, signal = 15, stdout = '', stderr = '' } },
+    ['rex times out without a signal'] = { result = { code = 124, signal = 0, stdout = '', stderr = '' } },
+    ['wait() returns no table'] = { result = 'not a table' },
     ['rex prints junk'] = { result = { code = 0, signal = 0, stdout = 'panic: oh no\n', stderr = '' } },
     ['rex prints nothing'] = { result = { code = 0, signal = 0, stdout = '', stderr = '' } },
     ['the reply is not a table'] = { result = { code = 0, signal = 0, stdout = '"handled"\n', stderr = '' } },

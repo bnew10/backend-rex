@@ -75,11 +75,15 @@ local function ask(req)
   if not ran then
     return nil, tostring(result)
   end
+  if type(result) ~= 'table' then
+    return nil, ('rex do gave no result: %s'):format(vim.inspect(result))
+  end
+  -- vim.system's own timeout: it kills `rex` and reports 124
+  if result.code == 124 then
+    return nil, ('rex do timed out after %d ms'):format(M.config.timeout)
+  end
   if result.code ~= 0 then
-    if result.code == 124 and result.signal == 15 then
-      return nil, ('rex do timed out after %d ms'):format(M.config.timeout)
-    end
-    return nil, ('rex do exited %d: %s'):format(result.code, vim.trim(result.stderr or ''))
+    return nil, ('rex do exited %s: %s'):format(tostring(result.code), vim.trim(result.stderr or ''))
   end
   local decoded, reply = pcall(vim.json.decode, result.stdout or '')
   if not decoded or type(reply) ~= 'table' then
