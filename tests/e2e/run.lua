@@ -410,6 +410,18 @@ local function cases()
     expect(wins() == 2, 'core did not fall back to a Neovim split')
   end)
 
+  case(':checkhealth smart-splits reaches Rex', function()
+    local report = nv([[
+      vim.cmd('checkhealth smart-splits')
+      local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+      vim.cmd('bwipeout')
+      return text
+    ]])
+    expect(report:find('OK `rex` is /'), '%s', report)
+    expect(report:find('OK pane ' .. vim.pesc(B) .. ' is in tab .- %(tiled layer, 4 panes%)'), '%s', report)
+    expect(not report:find('ERROR'), '%s', report)
+  end)
+
   case(('latency: %d edge moves into Rex'):format(LATENCY_RUNS), function()
     nv("require('e2e').calls = {}")
     local failures = 0
