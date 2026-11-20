@@ -16,8 +16,7 @@ Two halves have to agree: this plugin, and a few Rex key bindings that let `<C-h
 
 ### Neovim
 
-The checkout lives at `~/repos/backend-rex` and has no remote, so
-[lazy.nvim](https://github.com/folke/lazy.nvim) loads it from there with `dir`:
+With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
@@ -27,10 +26,17 @@ The checkout lives at `~/repos/backend-rex` and has no remote, so
     move = { at_edge = 'stop' },
   },
   dependencies = {
-    { dir = '~/repos/backend-rex', main = 'smart-splits-backend-rex', opts = {} },
+    { 'bnew10/backend-rex', main = 'smart-splits-backend-rex', opts = {} },
   },
 }
 ```
+
+To load a local checkout instead, add `dev = true` to the backend's spec: lazy.nvim then takes it from
+`backend-rex` under its `dev.path` (`~/projects` by default).
+
+Outside Rex no backend detects, so core warns during `setup()` that none of the configured backends
+detected. If you also run Neovim outside Rex, silence that with `mux = { warn_if_unusable = false }`
+next to `backend`.
 
 With another multiplexer running inside a Rex pane, list its backend first, since tmux in a Rex pane
 still sees `$REX_SESSION` and `$REX_BLOCK`; the first backend that detects wins:
@@ -65,8 +71,9 @@ shell pane behaves exactly like Neovim's edge:
 ```lua
 -- ~/.config/rex/init.lua
 local TERMINAL = "com.superlogical.terminal"
--- the same checkout lazy.nvim loads
-local PLUGIN = os.getenv("HOME") .. "/repos/backend-rex"
+-- where lazy.nvim installs this plugin; with a local checkout (`dev = true`),
+-- point this at the checkout instead
+local PLUGIN = os.getenv("HOME") .. "/.local/share/nvim/lazy/backend-rex"
 local smart = dofile(PLUGIN .. "/lua/smart-splits-backend-rex/layout.lua")
 
 -- Neovim is the pane's foreground program: it gets the key, and smart-splits
