@@ -152,8 +152,11 @@ end
 ---Under core's `:checkhealth smart-splits` header. Runs one real `rex do`
 ---when inside Rex, which checks the whole path a keypress takes.
 function M.health()
-  if vim.fn.executable('rex') ~= 1 then
+  local rex = vim.fn.exepath('rex')
+  if rex == '' then
     vim.health.error('`rex` is not on $PATH')
+  else
+    vim.health.ok(('`rex` is %s'):format(rex))
   end
   local session, block = env('REX_SESSION'), env('REX_BLOCK')
   if not session or not block then

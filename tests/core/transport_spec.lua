@@ -200,6 +200,21 @@ describe('health()', function()
     return false
   end
 
+  it('names the `rex` it would run, or says there is none', function()
+    local path = vim.env.PATH
+    local bin = vim.fn.tempname()
+    vim.fn.mkdir(bin, 'p')
+    vim.fn.writefile({ '#!/bin/sh' }, bin .. '/rex')
+    vim.uv.fs_chmod(bin .. '/rex', 493) -- 0755
+    vim.env.PATH = bin
+    backend.health()
+    vim.env.PATH = vim.fn.tempname()
+    backend.health()
+    vim.env.PATH = path
+    assert.is_true(reported('ok', '`rex` is ' .. vim.pesc(bin .. '/rex') .. '$'), vim.inspect(said))
+    assert.is_true(reported('error', '`rex` is not on %$PATH'), vim.inspect(said))
+  end)
+
   it('explains itself outside Rex without calling it', function()
     local rex = h.rex('nested-4pane', ids.A)
     vim.env.REX_SESSION = nil
