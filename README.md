@@ -159,8 +159,8 @@ border would move under a pane drawn over the whole window.
 
 ## Latency
 
-Neovim blocks for the whole round trip. Over 24 edge moves in `just e2e` core measured a median of
-42 ms (40-57 ms), with no failures. Nearly all of it is starting the `rex` CLI: the same view and
+Neovim blocks for the whole round trip. `just e2e` times 24 edge moves per run as core sees them:
+over six runs the median was 41-43 ms and single moves took 38-60 ms, with no failures. Nearly all of it is starting the `rex` CLI: the same view and
 focus take 2.5 ms inside an already running `rex do`. Core warns about calls over 100 ms.
 
 ## Limitations
