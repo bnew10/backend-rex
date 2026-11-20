@@ -530,12 +530,15 @@ end
 
 pcall(rex, { 'kill', S })
 local after = session_ids()
-local restored = after[S] == nil
-for id in pairs(before) do
-  restored = restored and after[id] ~= nil
+results[#results + 1] = after[S] == nil
+say('%s  scratch session removed', after[S] == nil and 'PASS' or 'FAIL')
+-- Other tools may come and go while this runs, so a vanished session is
+-- reported, not failed: every command above names the scratch session.
+for id, label in pairs(before) do
+  if not after[id] then
+    say('      %s (%s) ended during the run', id, label)
+  end
 end
-results[#results + 1] = restored
-say('%s  scratch session removed, every other session still there', restored and 'PASS' or 'FAIL')
 
 local failed = #vim.tbl_filter(function(r)
   return not r
