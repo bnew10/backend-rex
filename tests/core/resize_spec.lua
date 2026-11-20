@@ -30,6 +30,15 @@ describe('resize()', function()
     cols, rows = vim.o.columns, vim.o.lines
   end)
 
+  it("never takes one axis's size for the other's", function()
+    local layout = require('smart-splits-backend-rex.layout')
+    local view = h.fixture('nested-4pane')
+    for dir, req in pairs({ right = { rows = 40 }, down = { cols = 100 } }) do
+      req.op, req.dir, req.block = 'resize', dir, ids.A
+      assert.are.same({ nil, 'bad request' }, { layout.plan(view, req) })
+    end
+  end)
+
   it('sends the amount and the pane size in cells', function()
     local rex = h.rex('nested-4pane', ids.A)
     backend.resize('right', { amount = 7 })

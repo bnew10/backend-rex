@@ -250,7 +250,10 @@ function M.plan(view, req)
       return nil, 'zoomed'
     end
     local axis = AXIS[dir]
-    local amount, cells = req.amount or AMOUNT, axis == 'horizontal' and req.cols or req.rows
+    local amount, cells = req.amount or AMOUNT, req.rows
+    if axis == 'horizontal' then
+      cells = req.cols
+    end
     if type(amount) ~= 'number' or type(cells) ~= 'number' or cells <= 0 then
       return nil, 'bad request'
     end
