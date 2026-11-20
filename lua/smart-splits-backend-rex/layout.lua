@@ -71,7 +71,7 @@ end
 ---The window and layer whose layout holds `block`, that layer's leaves, and
 ---`block`'s own leaf. Floating layers count: a pane there navigates among the
 ---panes of its own layer.
-function M.locate(view, block)
+local function locate(view, block)
   for _, window in ipairs(view.windows or {}) do
     for _, layer in ipairs(window.layers or {}) do
       if layer.layout then
@@ -119,7 +119,7 @@ local function choose(candidates, me, dir, at)
 end
 
 ---The leaf across my edge in `dir`, or `nil` at the edge of the layer.
-function M.neighbour(where, dir, at)
+local function neighbour(where, dir, at)
   local me, candidates = where.me, {}
   for _, c in ipairs(where.leaves) do
     if
@@ -135,7 +135,7 @@ end
 
 ---Where a wrap past my edge in `dir` lands: of the leaves level with me, the
 ---farthest the other way. `nil` when no other leaf is level with me.
-function M.farthest(where, dir, at)
+local function farthest(where, dir, at)
   local back = OPPOSITE[dir]
   local sign = FORWARD[back] and 1 or -1
   local me, candidates, far = where.me, {}, nil
@@ -157,7 +157,7 @@ end
 ---(my right or bottom border), else the nearest with `block` on its after side.
 ---`ids` holds one leaf from each side, which is how `session.resize_pane` names
 ---a split.
-function M.border(layout, block, axis)
+local function border(layout, block, axis)
   local before, after
   local function walk(node)
     if node.block_id then
@@ -212,7 +212,7 @@ function M.plan(view, req)
   if not AXIS[dir] or type(req.block) ~= 'string' then
     return nil, 'bad request'
   end
-  local where = M.locate(view, req.block)
+  local where = locate(view, req.block)
   if not where then
     return nil, 'block not in this session'
   end
@@ -223,9 +223,9 @@ function M.plan(view, req)
       return nil, 'zoomed'
     end
     local at = cursor(where.me, dir, req)
-    local target = M.neighbour(where, dir, at)
+    local target = neighbour(where, dir, at)
     if not target and req.at_edge == 'wrap' then
-      target = M.farthest(where, dir, at)
+      target = farthest(where, dir, at)
     end
     if target then
       return 'focus_block', { block_id = target }
@@ -253,16 +253,16 @@ function M.plan(view, req)
     if type(amount) ~= 'number' or type(cells) ~= 'number' or cells <= 0 then
       return nil, 'bad request'
     end
-    local border = M.border(where.layer.layout, req.block, axis)
-    if not border then
+    local split = border(where.layer.layout, req.block, axis)
+    if not split then
       return nil, 'no border'
     end
-    local to = ratio(border.node, where.me, axis, dir, amount, cells)
+    local to = ratio(split.node, where.me, axis, dir, amount, cells)
     if not to then
       return nil, 'at limit'
     end
     return 'resize_pane',
-      { direction = axis, before_block_id = border.ids[1], after_block_id = border.ids[2], ratio = to }
+      { direction = axis, before_block_id = split.ids[1], after_block_id = split.ids[2], ratio = to }
   end
 
   return nil, 'bad request'
@@ -273,7 +273,7 @@ end
 ---raises for anything Rex reports; the reply says why nothing happened.
 ---@param rex table
 ---@param req table
----@return { handled: boolean, did?: string, args?: table, why?: string }
+---@return { handled: boolean, did?: string, why?: string }
 function M.handle(rex, req)
   local view, err = rex.session.view({})
   if not view then
@@ -281,7 +281,7 @@ function M.handle(rex, req)
   end
 
   if req.op == 'locate' then
-    local where = type(req.block) == 'string' and M.locate(view, req.block)
+    local where = type(req.block) == 'string' and locate(view, req.block)
     if not where then
       return { handled = false, why = 'block not in this session' }
     end
@@ -302,7 +302,7 @@ function M.handle(rex, req)
   if call_err ~= nil then
     return { handled = false, why = tostring(call_err) }
   end
-  return { handled = true, did = method, args = args }
+  return { handled = true, did = method }
 end
 
 return M
